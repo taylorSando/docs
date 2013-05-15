@@ -684,7 +684,7 @@ That other is in map form:
 
 ```clojure
 {:in [[:input-path1] [:input-path2]] :fn 'effect-fn}
-
+```
 
 ## Dataflow description
 

@@ -24,13 +24,18 @@ applications.
 ## The big picture
 
 The main idea behind Pedestal applications is that there are three
-distinct models and three processes which create them. The three
+distinct models and two processes which mediate between them. The three
 models are the **data model**, the **application model** and **document object
-model**. The three processes are **transforms** which generate data models,
-**dataflow** which maps from data models to the application model and
-**rendering** which maps from the application model to the DOM.
+model**. The first process is the **dataflow**, which creates the data model,
+and helps populate the application model.  The second process is
+**rendering**, which maps from the application model to the DOM.
 
 ![Three models](/documentation/images/client/overview/three_models.png)
+
+The above image should have the three model boxes, but only 2 arrows.
+The dataflow should be bidrectional between the Data Model and Application Model.
+Transforms and Derives both change the Data Model, not just transforms.  Also,
+these are both apart of the dataflow.  
 
 The three models are described below. The processes which create them
 will be described later this document.
@@ -43,6 +48,18 @@ general. A data model could be used as the basis for many applications
 and the data can take any shape. Data models should be normalized and
 should support simple data transformations and queries. In many ways
 the data model is like a database.
+
+```clojure
+;; A simple data model
+{:company
+ :id 5
+ :name "ABC Corp"
+ :is-big True
+ :location {:city "New York" :state "New York" :country "United States"}
+ :employees
+ [{:employee-id 1 :first-name "John" :last-name "Smith"},
+  {:employee-id 2 :first-name "Jane" :last-name "Anderson"}]}
+```
 
 
 ### Application model
@@ -58,7 +75,20 @@ application with all rendering and formatting information
 removed. What remains is the information, structure and descriptions
 of transformations which can be applied to the data model.
 
-
+```clojure
+{:company
+ :value 5
+ :attrs {:is-big True :name "ABC Corp}
+ {:children {:location
+             {:attrs {:city "New York", :state "New York", :country "United States"}}
+             :employees
+             {:children
+              [{:value 1
+                :attrs  {:first-name "John" :last-name "Smith"} },
+               {:value 1
+                :attrs  {:first-name "John" :last-name "Anderson"} }]}}}}
+```
+           
 ### Document object model
 
 We all know the DOM. In Pedestal the DOM is used only for what it was
@@ -79,6 +109,42 @@ process of rendering could just as easily render with Flash,
 JavaScript visualization libraries like D3 or other JavaScript
 component libraries.
 
+```html
+<h1>ABC Corp</h1>
+<div class='row'>
+  <div class='row'>
+    <div class="span2">City: </div>
+    <div class="span3">New York</div>
+  </div>
+  <div class='row'>
+    <div class="span2">State: </div>
+    <div class="span3">New York</div>
+  </div>
+  <div class='row'>
+    <div class="span2">Country: </div>
+    <div class="span3">United States</div>
+  </div>
+  <table>
+    <caption>Employees</caption>
+    <thead>
+      <tr>
+        <th>First Name</th>
+        <th>Last Name</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>John</td>
+        <td>Smith</td>
+      </tr>
+      <tr>
+        <td>Jane</td>
+        <td>Anderson</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+```
 
 ## How the pieces fit
 
@@ -89,14 +155,15 @@ model queue**. The input and output queues convey messages and the app
 model queue conveys application model deltas.
 
 Pedestal applications are divided into two main parts: **application**
-and **view**. The application receives messages (transformations)
-which cause change to the data models. The application model is a
-projection of the data models. This projection takes the form of a
-stream of deltas which represent change in the application model. This
-stream of deltas is consumed by the view which draws some
+and **view**. The application receives messages, which act through 
+the dataflow, to change the data models. The application model
+is a projection of the data models. This projection takes the form of a
+stream of deltas, which represent change in the application model. This
+stream of deltas is consumed by the view, which draws some
 representation of the application model on a screen for a human to
-interact with. Part of the application model describes the way that
-human interactions can cause transformations of the data model.
+interact with. Part of the application model contains functions that
+allow human interaction to be propogated back to the
+data model.
 
 ![Big picture](/documentation/images/client/overview/big_picture.png)
 
@@ -107,11 +174,11 @@ describe each part in more detail.
 
 ## Messages
 
-The messages which are sent to and from an application on the input
-and output queues are encoded as Clojure maps. Each message has a
-`topic` and a `type`. A `topic` identifies a group of related messages
+The messages which are sent to and from an application through the
+queues are encoded as Clojure maps. The message contains two keys,
+`topic` and `type`. A `topic` identifies a group of related messages,
 and a `type` identifies the exact purpose of the message. A message
-may contain any other data.
+map may contain additional key and value pairs.
 
 The `topic` and `type` keys are namespaced to
 `io.pedestal.app.messages`. It is common to require this namespace as `msg`
@@ -121,18 +188,18 @@ and use the `topic` and `type` vars as a shorthand.
 {msg/topic :model-name msg/type :set-name :name "Alice"}
 ```
 
-Messages like the one shown above are sent to the application, on the
-input queue, to transform internal data models. Messages like this may
-also come out of the application, on the output queue, and be sent to
-external services.
-
+Messages, like the one shown above, are sent to the input queue.  These
+messages reach the application by means of the dataflow.  It is through the
+dataflow that the messages are able to transform the internal data models.
+Messages can also come out of the application, through the output queue.
+These messages are then transferred to some external service.
 
 ## Application model
 
-The application model has a well defined structure which is a logical
-tree. We can think of this tree as a report which is based on the
-underlying data models and derived data and is updated when that data
-changes.
+The application model has a well defined structure, which is a logical
+tree. We can think of this tree as a report, which is based on the
+underlying data models and derived data, and is updated when that data
+models change.
 
 ![Application model tree](/documentation/images/client/overview/tree.png)
 
@@ -154,15 +221,15 @@ transformations. Tree structure can be expressed literally as shown below.
                 :c {...}}
 ```
 
-Transformations are vectors of messages which can be sent to the
+Transformations are vectors of messages, which can be sent to the
 application to transform a data model.
 
 
 ### Deltas
 
-This tree is not transmitted to the view as a tree but instead as a
-sequence of deltas which describe changes to the tree. These deltas
-describe changes to the tree's structure as well as changes to the
+This tree is not transmitted to the view as a tree, but instead, as a
+sequence of deltas, which describe changes to the tree. These deltas
+describe changes to the tree's structure, as well as changes to the
 values, attributes and transformations attached to each node.
 
 Tuples are used to describe these changes. For example:
@@ -193,19 +260,25 @@ add a node, one would send:
 This will add a new node named `:b` to the tree. This node is a child
 of `:a`.
 
-Anything after the path is an argument which is specific to the type
+Anything after the path is an argument.  Arguments are specific to the type
 of operation. In the example above, we tell the tree to store the
 children of this new node in a map.
 
 Types of arguments are shown below.
 
 ```clojure
-:node-create       ;; one of :map or :vector
+:node-create       ;; one of :map or :vector,
+; [:node-create [:a :b] :map], [:node-create [:a :b] :vector]
 :node-destroy      ;; none
+; [:node-destroy [:a :b]]
 :value             ;; the new value, or the old and new value
+; [:value [:a :b] 4], [:value [:a :b] 3 4]
 :transform-enable  ;; transform name and a vector of messages
+; [:transform-enable [:a :b] :key [{msg/topic :x msg/type :y}]]
 :transform-disable ;; transform name, or transform name and vector of messages
-:attr              ;; attribute name and value
+; [:transform-disable [:a :b] :key], [:transform-disable [:a :b] :key [{msg/topic :x msg/type :y}]]
+:attr              ;; attribute name, old value, and new value
+; [:attr [:a :b :c 1] :color :blue nil]
 ```
 
 Imagine a simple application which can be represented as a tree with
@@ -232,8 +305,8 @@ to 42.
 [[:value [:a :b] 42]]
 ```
 
-It is easy to understand the creation of structure and how to add values
-to nodes. Transforms are a little bit harder.
+It is easy to understand the creation of nodes, and how to add values
+and attrs to nodes. Transforms are a little bit harder.
 
 ```clojure
 [:transform-enable [:a :b] 
@@ -242,7 +315,7 @@ to nodes. Transforms are a little bit harder.
 
 A `transform-enable` delta is simply reporting that when viewing this
 node in the tree (node `[:a :b]`), it makes sense to send the provided
-vector of messages to the app model. It does not mean:
+vector of messages to the data model. It does not mean:
 
 * you have to send these messages
 * you cannot send other messages
@@ -311,7 +384,7 @@ There are several message types which allow us to control focus:
 * set-focus
 
 The last three message types above allow us to give names to parts of
-an application tree and then switch between them with `set-focus`
+an application tree, and then switch between them with `set-focus`
 messages.
 
 ```clojure
@@ -334,16 +407,17 @@ messages.
 In the sections above, we have seen how an application communicates
 with the outside world by receiving and sending messages. When a
 message is received by an application, it will become the input
-to a dataflow which results in application model deltas being produced.
+to a dataflow which results in the data models being updated,
+and application model deltas being produced.
 
 The application developer defines a dataflow by writing pure functions
-for each step in the dataflow and then describing these functions and
+for each step in the dataflow, and then describing these functions and
 their inputs in a map. The description map is passed to a `build`
 function to create an instance of the dataflow engine.
 
 This separation of pure functions from the description of their inputs
 and the construction of a dataflow engine allows us to distinguish
-between the functions themselves and the execution strategy. This
+between the functions themselves, and the execution strategy. This
 provides many benefits:
 
 * multiple execution strategies for the same set of functions

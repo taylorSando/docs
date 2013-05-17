@@ -78,7 +78,7 @@ of transformations which can be applied to the data model.
 ```clojure
 {:company
  :value 5
- :attrs {:is-big True :name "ABC Corp}
+ :attrs {:is-big True :name "ABC Corp"}
  {:children {:location
              {:attrs {:city "New York", :state "New York", :country "United States"}}
              :employees

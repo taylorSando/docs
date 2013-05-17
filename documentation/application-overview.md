@@ -77,8 +77,8 @@ of transformations which can be applied to the data model.
 
 ```clojure
 {:company
- :value 5
- :attrs {:is-big True :name "ABC Corp}
+ {:value 5
+ :attrs {:is-big True :name "ABC Corp"}
  {:children {:location
              {:attrs {:city "New York", :state "New York", :country "United States"}}
              :employees
@@ -86,7 +86,7 @@ of transformations which can be applied to the data model.
               [{:value 1
                 :attrs  {:first-name "John" :last-name "Smith"} },
                {:value 1
-                :attrs  {:first-name "John" :last-name "Anderson"} }]}}}}
+                :attrs  {:first-name "John" :last-name "Anderson"} }]}}}}}
 ```
            
 ### Document object model
@@ -149,21 +149,21 @@ component libraries.
 ## How the pieces fit
 
 An application is isolated from the outside world through the use of
-queues. All input to an application goes on the **input queue** and
-all output is either read from the **output queue** or from the **app
-model queue**. The input and output queues convey messages and the app
-model queue conveys application model deltas.
+queues. All input to an application goes on the **input queue**. All
+output is either read from the **output queue**, or from the **app
+model queue**. The input and output queues are concerned with messages,
+while the app model queue sends application model deltas.
 
 Pedestal applications are divided into two main parts: **application**
 and **view**. The application receives messages, which act through 
-the dataflow, to change the data models. The application model
-is a projection of the data models. This projection takes the form of a
-stream of deltas, which represent change in the application model. This
-stream of deltas is consumed by the view, which draws some
-representation of the application model on a screen for a human to
-interact with. Part of the application model contains functions that
-allow human interaction to be propogated back to the
-data model.
+the dataflow to change the data models. The application model
+is a projection of the data models. This projection gets its form from a
+stream of deltas, which represent change in the data model. This
+stream of deltas builds the application model, and is ultimately consumed by the view.
+The view draws a representation of the application model on a screen.
+The view is for a human to interact with.  There are hooks in the the application model
+that contain functions that allow these human interactions to be
+propogated back to the data model.
 
 ![Big picture](/documentation/images/client/overview/big_picture.png)
 
@@ -462,13 +462,13 @@ There are three forms for declaring a transform.  The first is a vector form:
 The second form is a map form:
 
 ```clojure
-{:key transform-key :out [output-path] :fn 'transform-fn}
+{:key :transform-key :out [output-path] :fn 'transform-fn}
 ```
 
 The third form is another map form:
 
 ```clojure
-{msg/topic transform-key msg/type [output-path] :fn 'transform-fn}
+{msg/topic :transform-key msg/type [output-path] :fn 'transform-fn}
 ```
 
 Here is an example.  A message is defined as follows:
